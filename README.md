@@ -1,5 +1,7 @@
 # 🗓️ WordPress Auto Post Scheduler (Streamlit Web)
 
+[![Streamlit App](https://img.shields.io/badge/Streamlit-Deployed-brightgreen?logo=streamlit)](https://web-scheduler.streamlit.app)
+
 Web ini adalah aplikasi berbasis Streamlit yang memungkinkan pengguna untuk menjadwalkan posting artikel ke situs WordPress.com secara otomatis menggunakan file Excel (`posts.xlsx`) sebagai basis datanya. Proses autentikasi menggunakan OAuth2 dengan WordPress Public API.
 
 ---
@@ -35,20 +37,32 @@ File yang diunggah harus memiliki kolom:
 Membutuhkan:
 - Client ID
 - Client Secret
-- Redirect URI → `http://localhost:8501`
+- Redirect URI → ```https://web-scheduler.streamlit.app```
 
-URL otorisasi:
-https://public-api.wordpress.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&redirect_uri=http://localhost:8501&response_type=code&scope=global
+### 🌐 OAuth2 Endpoints
 
-URL token exchange:
+**URL Otorisasi:**  
+```
+https://public-api.wordpress.com/oauth2/authorize?client_id={Client_id}&redirect_uri=https://web-scheduler.streamlit.app&response_type=code
+```
+
+**URL Token Exchange:**  
+```
 https://public-api.wordpress.com/oauth2/token
+```
 
 
 ---
 
 ## ▶️ Cara Menjalankan
 
-1. Install dependensi
-2. Jalankan aplikasi: streamlit run app.py
-3. Buka browser ke http://localhost:8501
-
+1. Buat apps baru di https://developer.wordpress.com/apps/new untuk mendapatkan Client ID dan Client Secret
+2. Isi semua yang diperlukan dan pastikan Redirect URL adalah https://web-scheduler.streamlit.app ![Contoh pengaturan aplikasi WordPress](images/wordpress-apps.png)
+3. Buka browser ke https://web-scheduler.streamlit.app
+4. Isi Client id dan Client secret untuk mendapatkan Access Token
+5. Ikuti petunjuk dan setujui, Anda akan melihat tampilan seperti berikut:  
+    ![Contoh permintaan token OAuth2](images/token-request.png)
+6. Isi kembali semua form yang diperlukan dan upload file xlsx anda
+7. Akan muncul log status posting di bawah form, dan posting akan masuk ke dashboard admin wordpress.  
+Contoh tampilan dashboard admin WordPress setelah posting berhasil:  
+![Contoh tampilan admin WordPress](images/wordpress-admin.png)

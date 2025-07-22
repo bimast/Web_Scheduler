@@ -33,7 +33,7 @@ if submitted:
     elif not access_token:
         # Generate OAuth URL
         st.info("🔑 Akses token belum tersedia. Gunakan tautan di bawah untuk mendapatkan kode OAuth.")
-        redirect_uri = "http://localhost/callback"
+        redirect_uri = "https://web-scheduler.streamlit.app"
         state = str(uuid.uuid4())
         auth_url = f"https://public-api.wordpress.com/oauth2/authorize?" + urlencode({
             "client_id": client_id,
