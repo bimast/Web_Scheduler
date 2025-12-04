@@ -26,10 +26,18 @@ def jadwalkan_semua_post(xlsx_path, access_token, site_url):
 
             res = post_to_wordpress(title, content, tags, publish_date, access_token, site_url)
 
-            if res['success']:
-                hasil.append(f"✅ Terjadwal: {title} ({res['status']}) → {res['url']}")
-            # else:
-            #     hasil.append(f"❌ Gagal posting: {title} | Error: {res.get('error', '')}")
+            if res.get('success'):
+                hasil.append(f"✅ Terjadwal: {title} ({res.get('status')}) → {res.get('url')}")
+            else:
+                # Append a helpful error message
+                err = res.get('error') or 'Unknown error'
+                hasil.append(f"❌ Gagal posting: {title} | Error: {err}")
+
+                # If authentication failed, stop further attempts and inform user
+                status_code = res.get('status_code')
+                if status_code in (401, 403) or 'Autentikasi gagal' in str(err):
+                    hasil.append("🔒 Autentikasi gagal — periksa Access Token, Client ID, dan Client Secret. Hentikan proses.")
+                    return hasil
         except Exception as err:
             hasil.append(f"⚠️ Error saat memproses baris {idx + 2}: {err}")
 

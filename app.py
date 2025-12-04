@@ -176,6 +176,30 @@ if submitted:
             hasil = jadwalkan_semua_post("temp_posts.xlsx", access_token, site_url)
             os.remove("temp_posts.xlsx")
 
-        st.success("✅ Proses penjadwalan selesai!")
+        # Summarize results: count successes and failures, then show appropriate
+        # top-level message. `hasil` is a list of strings where successes start
+        # with '✅'. Treat anything else as a failure/warning.
+        success_count = sum(1 for h in hasil if isinstance(h, str) and h.strip().startswith("✅"))
+        failure_count = len(hasil) - success_count
+
+        if success_count > 0 and failure_count == 0:
+            st.success(f"✅ Semua posting berhasil: {success_count} sukses, {failure_count} gagal")
+        elif success_count > 0 and failure_count > 0:
+            st.warning(f"⚠️ Proses selesai dengan beberapa kegagalan: {success_count} sukses, {failure_count} gagal")
+        else:
+            st.error("❌ Tidak ada posting yang berhasil. Periksa pesan kesalahan di bawah.")
+
+        # Show detailed lines. Show failures as errors/warnings and successes as normal text.
         for h in hasil:
-            st.write(h)
+            if not isinstance(h, str):
+                st.write(h)
+                continue
+
+            text = h.strip()
+            if text.startswith("✅"):
+                st.write(text)
+            elif text.startswith("⚠️"):
+                st.warning(text)
+            else:
+                # covers '❌' and other messages
+                st.error(text)
