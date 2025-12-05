@@ -4,6 +4,10 @@ import os
 import uuid
 from datetime import datetime
 from urllib.parse import urlencode
+from io import BytesIO
+
+import pandas as pd
+
 from utils.scheduler import jadwalkan_semua_post
 
 st.set_page_config(page_title="WordPress Scheduler", layout="wide")
@@ -98,108 +102,125 @@ else:
         st.markdown("Jika Anda ingin panduan lengkap, lihat `README.md` di repo atau buka: https://github.com/bimast/Web_Scheduler/blob/main/README.md")
 
 if show_main:
-    with st.form("credentials_form"):
-        st.subheader("🔐 Masukkan Data WordPress")
-        col1, col2 = st.columns(2)
+    st.subheader("🔐 Masukkan Data WordPress")
 
-        with col1:
-            client_id = st.text_input("Client ID", placeholder="Masukkan Client ID", key="client_id")
-            client_secret = st.text_input("Client Secret", placeholder="Masukkan Client Secret", key="client_secret", type="password")
-            site_url = st.text_input("Site URL (misal: mysite.wordpress.com)", key="site_url")
+    # Session-state initialization
+    st.session_state.setdefault("check_visible", True)
+    st.session_state.setdefault("uploaded_file_bytes", None)
+    st.session_state.setdefault("file_is_valid", None)
+    st.session_state.setdefault("last_check_msg", "")
+    st.session_state.setdefault("_start_processing", False)
 
-        with col2:
-            access_token = st.text_input("Access Token (opsional, jika sudah punya)", key="access_token", type="password")
-            uploaded_file = st.file_uploader("Upload File posts.xlsx", type=["xlsx"], key="file_upload")
+    # Credentials + uploader (outside forms so widgets update session_state)
+    col1, col2 = st.columns(2)
+    with col1:
+        client_id = st.text_input("Client ID", placeholder="Masukkan Client ID", key="client_id")
+        client_secret = st.text_input("Client Secret", placeholder="Masukkan Client Secret", key="client_secret", type="password")
+        site_url = st.text_input("Site URL (misal: mysite.wordpress.com)", key="site_url")
 
-        submitted = st.form_submit_button("🚀 Proses")
-else:
-    # Ensure variables used later are defined when the form isn't rendered
-    submitted = False
+    with col2:
+        access_token = st.text_input("Access Token (opsional, jika sudah punya)", key="access_token", type="password")
+        uploaded_file = st.file_uploader("Upload File posts.xlsx", type=["xlsx"], key="file_upload")
 
-if submitted:
-    if not client_id or not client_secret or not site_url:
-        st.warning("❗ Harap isi semua data yang dibutuhkan (Client ID, Client Secret, dan Site URL).")
-    elif not uploaded_file:
-        st.warning("❗ Harap upload file posts.xlsx.")
-    elif not access_token:
-        # Generate OAuth URL
-        st.info("🔑 Akses token belum tersedia. Gunakan tautan di bawah untuk mendapatkan kode OAuth.")
-        redirect_uri = "https://web-scheduler.streamlit.app"
-        state = str(uuid.uuid4())
-        auth_url = f"https://public-api.wordpress.com/oauth2/authorize?" + urlencode({
-            "client_id": client_id,
-            "redirect_uri": redirect_uri,
-            "response_type": "code",
-            "state": state
-        })
+    # Callbacks
+    def handle_check():
+        data = None
+        try:
+            if uploaded_file is not None:
+                data = uploaded_file.read()
+        except Exception:
+            data = None
 
-        st.markdown(f"[👉 Klik di sini untuk login dan mendapatkan kode OAuth]({auth_url})")
-        auth_code = st.text_input("Tempelkan kode yang Anda dapatkan dari URL redirect setelah login", key="auth_code")
+        if not data:
+            st.session_state.file_is_valid = False
+            st.session_state.last_check_msg = "Harap upload file terlebih dahulu."
+            return
 
-        if auth_code:
-            import requests
-
-            token_url = "https://public-api.wordpress.com/oauth2/token"
-            data = {
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "redirect_uri": redirect_uri,
-                "grant_type": "authorization_code",
-                "code": auth_code,
-            }
-
-            try:
-                resp = requests.post(token_url, data=data)
-                token_data = resp.json()
-                access_token = token_data.get("access_token")
-
-                if access_token:
-                    st.success("✅ Access token berhasil diperoleh.")
-                    st.code(access_token, language="bash")
-
-                    save_token = st.checkbox("Simpan access token sebagai .txt")
-                    if save_token:
-                        with open("access_token.txt", "w") as f:
-                            f.write(access_token)
-                        st.success("Token berhasil disimpan.")
-                else:
-                    st.error("Gagal mendapatkan access token.")
-                    st.json(token_data)
-            except Exception as e:
-                st.error(f"Terjadi kesalahan saat mengambil token: {e}")
-    else:
-        # Jalankan penjadwalan semua post
-        with st.spinner("⏳ Menjadwalkan post ke WordPress..."):
-            with open("temp_posts.xlsx", "wb") as f:
-                f.write(uploaded_file.read())
-
-            hasil = jadwalkan_semua_post("temp_posts.xlsx", access_token, site_url)
-            os.remove("temp_posts.xlsx")
-
-        # Summarize results: count successes and failures, then show appropriate
-        # top-level message. `hasil` is a list of strings where successes start
-        # with '✅'. Treat anything else as a failure/warning.
-        success_count = sum(1 for h in hasil if isinstance(h, str) and h.strip().startswith("✅"))
-        failure_count = len(hasil) - success_count
-
-        if success_count > 0 and failure_count == 0:
-            st.success(f"✅ Semua posting berhasil: {success_count} sukses, {failure_count} gagal")
-        elif success_count > 0 and failure_count > 0:
-            st.warning(f"⚠️ Proses selesai dengan beberapa kegagalan: {success_count} sukses, {failure_count} gagal")
-        else:
-            st.error("❌ Tidak ada posting yang berhasil. Periksa pesan kesalahan di bawah.")
-
-        # Show detailed lines. Show failures as errors/warnings and successes as normal text.
-        for h in hasil:
-            if not isinstance(h, str):
-                st.write(h)
-                continue
-
-            text = h.strip()
-            if text.startswith("✅"):
-                st.write(text)
-            elif text.startswith("⚠️"):
-                st.warning(text)
+        try:
+            df = pd.read_excel(BytesIO(data))
+            required_cols = ["judul", "konten_html", "tag", "tanggal_publish"]
+            missing = [c for c in required_cols if c not in df.columns]
+            if missing:
+                st.session_state.file_is_valid = False
+                st.session_state.last_check_msg = f"Kolom hilang: {', '.join(missing)}"
             else:
-                # covers '❌' and other messages
-                st.error(text)
+                st.session_state.file_is_valid = True
+                st.session_state.uploaded_file_bytes = data
+                st.session_state.last_check_msg = "Format file valid."
+        except Exception as e:
+            st.session_state.file_is_valid = False
+            st.session_state.last_check_msg = f"Gagal membaca file: {e}"
+
+    def handle_process():
+        # hide the check UI immediately and schedule processing
+        st.session_state.check_visible = False
+        # ensure bytes saved
+        try:
+            if uploaded_file is not None:
+                st.session_state.uploaded_file_bytes = uploaded_file.read()
+        except Exception:
+            pass
+        st.session_state._start_processing = True
+        try:
+            st.experimental_rerun()
+        except Exception:
+            return
+
+    # Render buttons
+    if st.session_state.check_visible:
+        st.button("🔍 Periksa File", on_click=handle_check)
+    st.button("🚀 Proses", on_click=handle_process)
+
+    # Show last check status
+    if st.session_state.get("file_is_valid") is True:
+        st.success(f"✅ Terakhir dicek: {st.session_state.get('last_check_msg')}")
+    elif st.session_state.get("file_is_valid") is False:
+        st.warning(f"⚠️ Terakhir dicek: {st.session_state.get('last_check_msg')}")
+
+    # If processing was requested (set by handle_process), run it here
+    if st.session_state.get("_start_processing"):
+        # Basic validation before processing
+        if not client_id or not client_secret or not site_url:
+            st.warning("❗ Harap isi semua data yang dibutuhkan (Client ID, Client Secret, dan Site URL).")
+            st.session_state._start_processing = False
+        elif not st.session_state.get("uploaded_file_bytes"):
+            st.warning("❗ Harap upload file posts.xlsx.")
+            st.session_state._start_processing = False
+        else:
+            with st.spinner("⏳ Menjadwalkan post ke WordPress..."):
+                file_bytes = st.session_state.get("uploaded_file_bytes")
+                with open("temp_posts.xlsx", "wb") as f:
+                    f.write(file_bytes)
+
+                hasil = jadwalkan_semua_post("temp_posts.xlsx", access_token, site_url)
+                try:
+                    os.remove("temp_posts.xlsx")
+                except Exception:
+                    pass
+
+            # Processing finished — reset flags so UI can be reused
+            st.session_state._start_processing = False
+            st.session_state.check_visible = True
+
+            # Summarize results
+            success_count = sum(1 for h in hasil if isinstance(h, str) and h.strip().startswith("✅"))
+            failure_count = len(hasil) - success_count
+
+            if success_count > 0 and failure_count == 0:
+                st.success(f"✅ Semua posting berhasil: {success_count} sukses, {failure_count} gagal")
+            elif success_count > 0 and failure_count > 0:
+                st.warning(f"⚠️ Proses selesai dengan beberapa kegagalan: {success_count} sukses, {failure_count} gagal")
+            else:
+                st.error("❌ Tidak ada posting yang berhasil. Periksa pesan kesalahan di bawah.")
+
+            for h in hasil:
+                if not isinstance(h, str):
+                    st.write(h)
+                    continue
+                text = h.strip()
+                if text.startswith("✅"):
+                    st.write(text)
+                elif text.startswith("⚠️"):
+                    st.warning(text)
+                else:
+                    st.error(text)
