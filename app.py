@@ -123,7 +123,7 @@ if show_main:
         site_url = st.text_input("Site URL (misal: mysite.wordpress.com)", key="site_url")
 
     with col2:
-        access_token = st.text_input("Access Token (opsional, jika sudah punya)", key="access_token", type="password", value=st.session_state.get("_stored_access_token", ""))
+        access_token = st.text_input("Access Token", key="access_token", type="password", value=st.session_state.get("_stored_access_token", ""))
         
         # Button to get access token via OAuth
         col_token1, col_token2 = st.columns([3, 1])
