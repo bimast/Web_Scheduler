@@ -9,6 +9,7 @@ from io import BytesIO
 import pandas as pd
 
 from utils.scheduler import jadwalkan_semua_post
+from utils.oauth import get_access_token
 
 st.set_page_config(page_title="WordPress Scheduler", layout="wide")
 
@@ -110,6 +111,9 @@ if show_main:
     st.session_state.setdefault("file_is_valid", None)
     st.session_state.setdefault("last_check_msg", "")
     st.session_state.setdefault("_start_processing", False)
+    st.session_state.setdefault("auth_code", None)
+    st.session_state.setdefault("show_auth_input", False)
+    st.session_state.setdefault("_stored_access_token", "")
 
     # Credentials + uploader (outside forms so widgets update session_state)
     col1, col2 = st.columns(2)
@@ -119,7 +123,68 @@ if show_main:
         site_url = st.text_input("Site URL (misal: mysite.wordpress.com)", key="site_url")
 
     with col2:
-        access_token = st.text_input("Access Token (opsional, jika sudah punya)", key="access_token", type="password")
+        access_token = st.text_input("Access Token (opsional, jika sudah punya)", key="access_token", type="password", value=st.session_state.get("_stored_access_token", ""))
+        
+        # Button to get access token via OAuth
+        col_token1, col_token2 = st.columns([3, 1])
+        with col_token1:
+            st.write("")  # spacer
+        with col_token2:
+            get_token_clicked = st.button("🔑 Dapatkan Token")
+        
+        if get_token_clicked:
+            if not client_id or not client_secret:
+                st.error("❌ Harap isi Client ID dan Client Secret terlebih dahulu.")
+            else:
+                # Generate authorization URL
+                auth_url = f"https://public-api.wordpress.com/oauth2/authorize?client_id={client_id}&response_type=code&redirect_uri=https://web-scheduler.streamlit.app&state={uuid.uuid4()}"
+                
+                # Open authorization URL
+                components.html(
+                    f"""
+                    <a id="wpauth" href="{auth_url}" target="_blank" rel="noopener noreferrer"></a>
+                    <script>
+                        document.getElementById('wpauth').click();
+                    </script>
+                    """,
+                    height=0,
+                )
+                
+                st.info("📋 Browser akan membuka halaman otorisasi WordPress. Salin **authorization code** dari URL setelah otorisasi, lalu masukkan di bawah.")
+                st.session_state.show_auth_input = True
+        
+        # Show auth code input if needed
+        if st.session_state.show_auth_input:
+            auth_code = st.text_input("Masukkan Authorization Code dari URL", key="auth_code_input")
+            
+            col_auth1, col_auth2 = st.columns(2)
+            with col_auth1:
+                if st.button("✅ Tukarkan dengan Access Token"):
+                    if auth_code:
+                        result = get_access_token(client_id, client_secret, auth_code)
+                        if result["success"]:
+                            st.session_state._stored_access_token = result["access_token"]
+                            st.success(f"✅ Access Token berhasil didapatkan!")
+                            st.code(result["access_token"], language="text")
+                            st.session_state.show_auth_input = False
+                            # Rerun to update the access_token input field
+                            try:
+                                st.experimental_rerun()
+                            except Exception:
+                                pass
+                        else:
+                            st.error(f"❌ Gagal mendapatkan access token: {result['error']}")
+                    else:
+                        st.error("❌ Harap masukkan authorization code.")
+            
+            with col_auth2:
+                if st.button("❌ Batal"):
+                    st.session_state.show_auth_input = False
+                    try:
+                        st.experimental_rerun()
+                    except Exception:
+                        pass
+        
         uploaded_file = st.file_uploader("Upload File posts.xlsx", type=["xlsx"], key="file_upload")
 
     # Callbacks
